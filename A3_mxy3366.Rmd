@@ -1,0 +1,185 @@
+---
+title: "MLR models for predicting the sale price of homes in GTA"
+author: "Xinyi Ma, ID 1005703366"
+date: "November 27, 2020"
+output: 
+  html_document: default
+---
+
+```{r, echo=FALSE, include=FALSE}
+library(tidyverse)
+# load the libraries needed for the assignment
+```
+
+
+## I. Data Wrangling
+(a) The IDs of the samples selected:
+```{r, echo=FALSE}
+a3data_mxy <- read.csv("real203.csv")
+# read the csv into the project
+set.seed(1005703366)
+a3random_mxy <- sample_n(a3data_mxy, 150, replace = FALSE, prob = NULL)
+# set the seed my student number and randomly select 150 sample from the original data set
+a3random_mxy$ID
+# report the IDs of the sample selected
+```
+
+(b) Replacing lotlength and lotwidth with lotsize\
+```{r, echo=FALSE}
+a3random_mxy <- a3random_mxy %>%
+  mutate(lotsize = lotlength * lotwidth)
+# create a new variable named 'lotsize'
+a3random_mxy$lotlength <- NULL
+a3random_mxy$lotwidth <- NULL
+# replace 'lotlength' and 'lotwidth'
+```
+
+(c) Removing an predictor and some observations (with missing values)\
+```{r, echo=FALSE}
+a3random_mxy$maxsqfoot <- NULL
+# remove one predictor 'maxsqfoot'
+a3selected_mxy <- a3random_mxy %>%
+  filter(!is.na(parking)) %>%
+  filter(!is.na(lotsize)) %>%
+  filter(!is.na(taxes))
+# remove the observations with NA values
+# 9 observation removed and there are 141 observations left
+```
+
+Explanation:\
+I removed maxsqfoot since it contains so many missing values (NA) that it does not provide much information, and would cause trouble later when we are fitting the models.\
+Then, I removed 9 observations that contain some NA values (in one or more of parking, lotsize or taxes), for the missing values may cause trouble in latter parts as well.\
+I did not remove other points, though I notice some really unusual points in taxes (about 1,000 points smaller than the others). However, I can only remove two more points while there are four such points, and without thorough examination I could not decide which ones to remove so I would just leave them there for now.\
+
+## II. Exploratory Data Analysis
+
+(a) classify each variable (the ones not being used later are also included)\
+sale: discrete\
+list: discrete\
+bedroom: discrete\
+bathroom: discrete\
+parking: discrete\
+maxsqfoot: continuous\
+taxes: discrete\
+lotwidth: continuous\
+lotlength: continuous\
+lotsize: continuous\
+location: categorical\
+
+(b)
+The pairwise correlations matrix:\
+```{r, echo=FALSE}
+a3numeric_mxy <- select(a3selected_mxy, -c(ID, location))
+# create a data frame with only numeric variables
+cor_matrix_mxy <- round(cor(a3numeric_mxy), 4)
+cor_matrix_mxy
+# produce the pairwise correlations matrix for all the numeric variables
+```
+The scatterplot matrix:\
+```{r, echo=FALSE}
+pairs(a3numeric_mxy) + title(main = "scatterplot matrix for all the numeric variables #3366")
+# produce the scatterplot matrix for all the numeric variables
+```
+According to the first row of the pairwise correlations matrix above, the predictors for sale price, in terms of their correlation coefficient, rank from highest to lowest as follows:\
+list price (0.9882)\
+taxes (0.8363)\
+bathroom (0.5930)\
+bedroom (0.4318)\
+lotsize (0.3647)\
+parking(0.1597)\
+This indicates that list and sale price have the strongest correlation, followed by taxes, bathroom, bedroom and lotsize, while parking and sale price have the weakest correlation. The stronger the correlation of a variable with sale price is, the better it can predict the sale price.\
+
+(c)\
+For the predictor lotsize would the assumption of constant variance be strongly violated.\
+Here is the plot of standardized residuals for a model of lotsize and sale price:\
+```{r, echo=FALSE}
+mod_lotsizemxy <- lm(sale ~ lotsize, data = a3selected_mxy)
+# create a model for predictor lotsize and sale price
+plot(mod_lotsizemxy, 3, caption = list("1","2", "standardized residual plot of lotsize # 3366"))
+# a plot of the (standardized) residuals for the model of lotsize and sale price
+```
+
+From the plot, we can see that there is an obvious trend of the residuals increasing, especially when the fitted values are between 1500000 and 2000000, where most data points are located. Therefore, we can conclude that the assumption of constant variance is strongly violated for predictor lotsize.\
+
+
+## III. Methods and Model
+
+(i) An additive linear regression model with all available predictors variables for sale price:\
+```{r, echo=FALSE, include=FALSE}
+mod_allmxy <- lm(sale ~ list + bedroom + bathroom + parking + taxes + location + lotsize, data = a3selected_mxy)
+summary(mod_allmxy)
+# the additive linear regression model with all available predictors and the summary of the model
+```
+The table:\
+```{r, echo=FALSE}
+Predictors <- c("list", "bedroom", "bathroom", "parking", "taxes", "location", "lotsize")
+Estimated_Coefficients <- c(0.8356, 7612.0000, 15620.0000, -22490.0000, 21.4200, 70270.0000, 2.1830)
+P_values <- c(0.0000, 0.6042, 0.2515, 0.0233, 0.0001, 0.0848, 0.3343)
+table_predictors_mxy <- data.frame(Predictors, Estimated_Coefficients, P_values)
+# table_predictors_mxy[,'Estimated_Coefficients'] = format(round(table_predictors_mxy[,'Estimated_Coefficients'], 4), nsmall = 4)
+print(table_predictors_mxy)
+# create and print the table of estimated regression coefficients and the p-values for the corresponding t-tests for these coefficients
+```
+Interpretation:\
+list (price): When the other predictors remain the same, as list price increases by 1 Canadian Dollar, the expected sale price of the home increases by 0.8356 Canadian Dollar on average.\
+parking: When the other predictors remain the same, as parking increases by 1 spot, the expected sale price of the home decreases by 22490 Canadian Dollars on average.\
+taxes: When the other predictors remain the same, as taxes increases by 1 Canadian Dollar, the expected sale price of the home increases by 21.42 Canadian Dollars on average.\
+
+(ii) Backward AIC:
+```{r, echo=FALSE, include=FALSE}
+AICmod_mxy <- step(mod_allmxy, direction = "backward")
+summary(AICmod_mxy)
+# The AIC model using backward elimination
+```
+The final model:\
+$\hat{sale} = 120000 + 0.8520list - 17250parking + 22.27taxes + 59730locationT$ (if location = T, locationT = 1; if location = M, locationT = 0)\
+The results are not consistent with those in part (i). Some predictors are removed from the model in part(i), and the estimated coefficients change as well.\
+
+(iii) Backward BIC:
+```{r, echo=FALSE, include=FALSE}
+n <- 141
+# number of data points in my selected data
+BICmod_mxy <- step(mod_allmxy, direction = "backward", k=log(n))
+summary(BICmod_mxy)
+# The BIC model using backward elimination
+```
+The final model:\
+$\hat{sale} = 166700 + 0.8677list - 26530parking + 21.02taxes$\
+This is not consistent with what I saw in part (i) and (ii), explanation:\
+1) There are some differences between the ways that AIC and BIC work, both of which are different from an additive linear regression model with all available predictors variables for sale price. When n>8(where n is the sample size and this is satisfied in this model), log(n)>2, BIC has heavier penalty term, so that a predictor has to contribute more to the model to be included.\
+2) Some predictors are removed from the previous models to get this model, and the coefficients of the predictors would change with changes in other predictors.\
+
+## IV. Discussions and Limitations
+
+(a) The diagnostic plots:\
+```{r, echo=FALSE}
+par(mfrow=c(2,2))
+plot(BICmod_mxy, caption = list("Residuals vs Fitted #3366", "Normal Q-Q #3366",
+       "Scale-Location #3366", "Cook's distance", "Residuals vs Leverage #3366"))
+# the 4 diagnostic plots of the model in III(iii), using a 2-by-2 layout, also changing the titles
+```
+(b) Interpretation:\
+1) For plot Residual vs Fitted: There is no obvious trend in this plot, indicating that linearity is satisfied.\
+2) For plot Normal Q-Q: Most points are on the dotted line, though there are a few outliers. This indicates that normality is mostly satisfied, though there are tails on both sides.\
+3) For plot Scale-Location: There is no obvious trend in this residual plot, indicating that constant variance is satisfied.\
+4) For Residual vs Leverage: There is no obvious trend, and all the points are within the range of cook's distance = 0.5. This indicates that there are no obvious influential points.\
+To conclude, the  normal error MLR assumptions are mostly satisfied, though there are a few outliers/tail.\
+
+(c) Next Steps:\
+1) I will consider using cross validation to access the ability of predicting on a new data set for the models and avoid overfitting. To do this, I will divide the data I have randomly into k(maybe 4) folds establish the model based using all but one fold (which is the training data) and use the fold that was left out as test data. Then I would calculate the cross validation error to see if the model can adapt to new data sets well.\
+2) I will also consider box-cox transformation to solve some problems of normality. This can be done since all the variables are strictly positive, and I would consider to do a family of power transformations (natural log, square root, etc).\
+3) I may try building an interaction model as well. Especially for the dummy variable Location, I think it may be a good idea to let it interact with other predictors in the model.
+
+```{r}
+set.seed(1005703366)
+x <- seq(from=0.1, to=20, by=0.1)
+error<-rchisq(200, 100)
+y <- 500 + 0.4*(x-10)^3 + error
+loesfit <- loess(y~x,span=0.7)
+predict(lm(y~x), data.frame(x=12))
+predict(loesfit,data.frame(x=12))
+```
+```{r}
+1-pf(2.917, 2, 15)
+```
+
